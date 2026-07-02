@@ -1,0 +1,6 @@
+@ResponsiveProcessingStudioAPI_HostAddress = http://localhost:5147
+
+GET {{ResponsiveProcessingStudioAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
