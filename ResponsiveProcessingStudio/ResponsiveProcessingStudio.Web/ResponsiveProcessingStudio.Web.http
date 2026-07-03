@@ -1,0 +1,6 @@
+@ResponsiveProcessingStudio.Web_HostAddress = http://localhost:5093
+
+GET {{ResponsiveProcessingStudio.Web_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
