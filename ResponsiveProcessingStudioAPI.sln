@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResponsiveProcessingStudioAPI", "ResponsiveProcessingStudioAPI\ResponsiveProcessingStudioAPI.csproj", "{F89609C4-C487-4D03-9E5B-1C14723FED6B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResponsiveProcessingStudio.Core", "ResponsiveProcessingStudio.Core\ResponsiveProcessingStudio.Core.csproj", "{F89609C4-C487-4D03-9E5B-1C14723FED6B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
