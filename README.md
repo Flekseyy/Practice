@@ -20,6 +20,8 @@
 10. Классификация усилена: тип от клиента плюс fallback по ключевым словам, если тип `Unknown`.
 11. Назначение исполнителя оставлено декоративным, без сложной модели занятости сотрудников.
 12. `RequestGenerator` перенесён в зону Web/интеграции, чтобы не перегружать Стажёра 4.
+13. Исправлены два взаимоисключающих варианта `StartAsync`, добавлена реализация `RequestAssigner` с обработкой `ServiceType.Unknown`.
+14. Фронтенд переведён с Razor Pages/MVC Views на обычный статический `index.html + CSS + JavaScript` в `wwwroot`. Backend — чистый ASP.NET Core Web API, без серверного рендеринга HTML. Добавлены `Program.cs`, `PipelineHub`, `PipelineBroadcastService` и пример `dashboard.js` с подключением к SignalR.
 
 ---
 
@@ -411,13 +413,13 @@ ResponsiveProcessingStudio.sln
 │   │   ├── PipelineBroadcastService.cs  // snapshot раз в 300-500 мс
 │   │   └── TestDataGeneratorService.cs  // генерация тестовых заявок
 │   │
-│   ├── Views / Pages
-│   │   ├── Dashboard
-│   │   └── CreateRequest
-│   │
-│   ├── wwwroot
-│   │   ├── js/dashboard.js
-│   │   └── css/site.css
+│   ├── wwwroot                          // статический фронт, без Razor
+│   │   ├── index.html                   // единственная HTML-страница: форма + дашборд
+│   │   ├── js
+│   │   │   ├── api.js                   // обёртки над fetch к /api/...
+│   │   │   └── dashboard.js             // SignalR-подключение и рендер UI
+│   │   └── css
+│   │       └── site.css
 │   │
 │   └── Program.cs
 │
@@ -543,6 +545,79 @@ public interface ISupportRequestPipeline
 }
 ```
 
+## Program.cs — как связаны статический фронт, API и SignalR
+
+Фронт — обычный `index.html` из `wwwroot`, backend — чистый Web API. Оба живут в одном ASP.NET Core приложении, поэтому CORS не нужен: браузер обращается на тот же хост и порт, с которого получил `index.html`.
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddSignalR();
+
+builder.Services.AddSingleton<ISupportRequestPipeline, SupportRequestPipeline>();
+builder.Services.AddSingleton<IRequestStateStore, RequestStateStore>();
+builder.Services.AddSingleton<IPipelineMetrics, PipelineMetrics>();
+
+builder.Services.AddSingleton<BankServiceFactory>();
+builder.Services.AddSingleton<IRequestClassifier, RequestClassifier>();
+builder.Services.AddSingleton<IRequestValidator, RequestValidator>();
+builder.Services.AddSingleton<IRequestAssigner, RequestAssigner>();
+builder.Services.AddSingleton<IRequestProcessor, RequestProcessor>();
+builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
+builder.Services.AddSingleton<IErrorSimulator, ErrorSimulator>();
+
+builder.Services.AddHostedService<PipelineBroadcastService>();
+
+var app = builder.Build();
+
+app.UseDefaultFiles();   // отдаёт wwwroot/index.html на запрос "/"
+app.UseStaticFiles();    // отдаёт css/js из wwwroot
+
+app.MapControllers();
+app.MapHub<PipelineHub>("/hubs/pipeline");
+
+app.Run();
+```
+
+Важная деталь: если проект создаётся из шаблона `webapi`, `wwwroot` и `UseStaticFiles()` там по умолчанию не настроены (в отличие от шаблонов `web`/`mvc`) — папку `wwwroot` нужно создать руками, а `UseDefaultFiles()`/`UseStaticFiles()` прописать явно, иначе `index.html` не откроется по корневому адресу.
+
+## PipelineHub и PipelineBroadcastService
+
+Хаб почти пустой — он только рассылает данные от сервера клиентам, клиент на нём ничего не вызывает:
+
+```csharp
+public class PipelineHub : Hub
+{
+}
+```
+
+Фоновый сервис берёт снапшот и рассылает его всем подключённым клиентам под именем события `SnapshotUpdated` — это имя должно совпадать с тем, что слушает `dashboard.js` (раздел 8.1):
+
+```csharp
+public class PipelineBroadcastService : BackgroundService
+{
+    private readonly ISupportRequestPipeline _pipeline;
+    private readonly IHubContext<PipelineHub> _hub;
+
+    public PipelineBroadcastService(ISupportRequestPipeline pipeline, IHubContext<PipelineHub> hub)
+    {
+        _pipeline = pipeline;
+        _hub = hub;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var snapshot = _pipeline.GetSnapshot();
+            await _hub.Clients.All.SendAsync("SnapshotUpdated", snapshot, stoppingToken);
+            await Task.Delay(400, stoppingToken);
+        }
+    }
+}
+```
+
 ---
 
 # 7. Почему такая архитектура не является оверинжинирингом
@@ -596,11 +671,134 @@ Web-приложение отвечает за:
 
 Технологически:
 
-* ASP.NET Core;
-* MVC или Razor Pages для страниц;
-* API Controllers для JSON REST API;
+* ASP.NET Core Web API (`AddControllers()`, без MVC Views и без Razor Pages);
 * SignalR для real-time dashboard;
-* обычный JavaScript для фронта.
+* фронт — один статический `wwwroot/index.html` + `CSS` + обычный `JavaScript`, без какого-либо фреймворка и без сборки (никакого React/Vue/webpack — просто файлы, отдаваемые `UseStaticFiles()`).
+
+### index.html — общая структура
+
+Один файл на весь дашборд: форма создания заявки, настройки, карточки метрик, визуальный конвейер и таблица заявок. Отдельной страницы под форму не нужно — она либо сверху страницы, либо в простом модальном блоке.
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Responsive Processing Studio</title>
+    <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+    <h1>Responsive Processing Studio — служба поддержки банка</h1>
+
+    <section id="controls">
+        <button id="btnStart">Запустить</button>
+        <button id="btnStop">Остановить</button>
+        <button id="btnGenerate100">Сгенерировать 100</button>
+    </section>
+
+    <section id="settings">
+        <label>Обработчиков <input id="workersCount" type="number" value="4" /></label>
+        <label>Очередь <input id="queueSize" type="number" value="50" /></label>
+        <label>Retry <input id="retryCount" type="number" value="3" /></label>
+        <label>Retry delay, мс <input id="retryDelayMs" type="number" value="500" /></label>
+        <label>Ошибки, % <input id="errorPercent" type="number" value="20" /></label>
+        <button id="btnApplySettings">Применить настройки</button>
+    </section>
+
+    <section id="createRequest">
+        <input id="clientName" placeholder="Имя клиента" />
+        <select id="serviceType">
+            <option value="">Не знаю (определит система)</option>
+            <option value="Credit">Кредит</option>
+            <option value="DebitCard">Карта</option>
+            <option value="Deposit">Вклад</option>
+            <option value="Mortgage">Ипотека</option>
+            <option value="MoneyTransfer">Перевод</option>
+        </select>
+        <textarea id="message" placeholder="Текст обращения"></textarea>
+        <button id="btnCreateRequest">Создать заявку</button>
+    </section>
+
+    <section id="metrics"></section>
+    <section id="pipelineVisual"></section>
+    <table id="requestsTable"></table>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
+```
+
+### api.js — обёртки над fetch
+
+```javascript
+const api = {
+    createRequest: (dto) => fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dto)
+    }).then(r => r.json()),
+
+    startPipeline: (options) => fetch("/api/pipeline/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options)
+    }),
+
+    stopPipeline: () => fetch("/api/pipeline/stop", { method: "POST" }),
+
+    generate: (count) => fetch(`/api/pipeline/generate?count=${count}`, { method: "POST" }),
+
+    getSnapshot: () => fetch("/api/pipeline/snapshot").then(r => r.json())
+};
+```
+
+### dashboard.js — подключение к SignalR и обработчики кнопок
+
+```javascript
+const connection = new signalR.HubConnectionBuilder()
+    .withUrl("/hubs/pipeline")
+    .withAutomaticReconnect()
+    .build();
+
+connection.on("SnapshotUpdated", (snapshot) => {
+    renderMetrics(snapshot);
+    renderPipelineVisual(snapshot);
+    renderRequestsTable(snapshot.recentRequests);
+});
+
+connection.start();
+
+document.getElementById("btnCreateRequest").addEventListener("click", async () => {
+    await api.createRequest({
+        clientName: document.getElementById("clientName").value,
+        message: document.getElementById("message").value,
+        serviceType: document.getElementById("serviceType").value || null
+    });
+});
+
+document.getElementById("btnStart").addEventListener("click", () => api.startPipeline(readSettingsFromForm()));
+document.getElementById("btnStop").addEventListener("click", () => api.stopPipeline());
+document.getElementById("btnGenerate100").addEventListener("click", () => api.generate(100));
+document.getElementById("btnApplySettings").addEventListener("click", () => api.startPipeline(readSettingsFromForm()));
+
+function readSettingsFromForm() {
+    return {
+        workersCount: Number(document.getElementById("workersCount").value),
+        queueSize: Number(document.getElementById("queueSize").value),
+        retryCount: Number(document.getElementById("retryCount").value),
+        retryDelayMs: Number(document.getElementById("retryDelayMs").value),
+        errorPercent: Number(document.getElementById("errorPercent").value)
+    };
+}
+
+function renderMetrics(snapshot) { /* обновить карточки по id */ }
+function renderPipelineVisual(snapshot) { /* обновить числа под стрелками этапов */ }
+function renderRequestsTable(requests) { /* перерисовать таблицу */ }
+```
+
+Важно: кнопка "Применить настройки" и кнопка "Запустить" вызывают один и тот же `POST /api/pipeline/start` — как раз то поведение из раздела 11.4: повторный вызов `StartAsync` сам пересобирает граф блоков, фронту не нужно знать разницу между "первым запуском" и "применением новых настроек".
 
 ## 8.2. Core-логика
 
@@ -871,9 +1069,10 @@ TransformBlock<SupportRequest, SupportRequest> classifyBlock;
 
 * если `ServiceType` указан — использовать его;
 * если `ServiceType.Unknown` — определить тип по ключевым словам;
-* через `BankServiceFactory` получить нужную услугу;
 * обновить статус заявки;
 * передать заявку дальше.
+
+`BankServiceFactory` здесь не вызывается — она используется дальше, на этапе назначения исполнителя (раздел 10.4), чтобы получить название отдела.
 
 Пример классификатора:
 
@@ -931,10 +1130,48 @@ TransformBlock<SupportRequest, SupportRequest> assignBlock;
 
 Назначение:
 
-* по типу услуги определить отдел;
+* по типу услуги через `BankServiceFactory` определить отдел (`RequiredDepartment`);
+* для `ServiceType.Unknown` — использовать отдельный общий отдел, не вызывая фабрику (она для `Unknown` бросает исключение, см. раздел 5);
 * выбрать случайного сотрудника из отдела;
 * записать `AssignedDepartment` и `AssignedHandler`;
 * обновить статус заявки.
+
+Это важный момент: если оставить `Unknown` необработанным, заявка с нераспознанным текстом дойдёт сюда именно в этом статусе (классификатор из раздела 10.2 специально оставляет `Unknown`, если ни одно ключевое слово не совпало), и без явной ветки для него код упадёт с исключением прямо внутри Dataflow-блока.
+
+```csharp
+public class RequestAssigner : IRequestAssigner
+{
+    private readonly BankServiceFactory _factory;
+
+    private static readonly Dictionary<ServiceType, string[]> Staff = new()
+    {
+        [ServiceType.Credit]        = new[] { "Иван", "Мария" },
+        [ServiceType.DebitCard]     = new[] { "Алексей", "Ольга" },
+        [ServiceType.Deposit]       = new[] { "Дмитрий" },
+        [ServiceType.Mortgage]      = new[] { "Светлана" },
+        [ServiceType.MoneyTransfer] = new[] { "Павел" },
+        [ServiceType.Unknown]       = new[] { "Дежурный специалист" }
+    };
+
+    public RequestAssigner(BankServiceFactory factory) => _factory = factory;
+
+    public Task<SupportRequest> AssignAsync(SupportRequest request, CancellationToken ct)
+    {
+        request.AssignedDepartment = request.ServiceType == ServiceType.Unknown
+            ? "Общий отдел"
+            : _factory.Create(request.ServiceType).RequiredDepartment;
+
+        var staff = Staff[request.ServiceType];
+        request.AssignedHandler = staff[Random.Shared.Next(staff.Length)];
+
+        request.Status = RequestStatus.Assigning;
+        request.UpdatedAt = DateTime.UtcNow;
+        return Task.FromResult(request);
+    }
+}
+```
+
+Так `BankServiceFactory` наконец реально используется в конвейере (а не остаётся кодом ради кода из идеи сеньора), а название отдела не дублируется — оно берётся из `BankService.RequiredDepartment`, а не задаётся ещё раз вручную в отдельном словаре.
 
 Назначение исполнителя декоративное. Не делаем модель “свободен/занят”, потому что это отдельная concurrency-задача и она не нужна для демонстрации TPL Dataflow.
 
@@ -1011,15 +1248,7 @@ new ExecutionDataflowBlockOptions
 2. дождаться корректного завершения;
 3. создать новый граф блоков с новыми настройками.
 
-```csharp
-public async Task StartAsync(PipelineOptions options, CancellationToken appLifetimeCt)
-{
-    if (_lastBlock != null)
-        await StopAsync();
-
-    // строим новый граф блоков с options.WorkersCount и options.QueueSize
-}
-```
+Полный код `StartAsync` с этой проверкой — в разделе 17, вместе с моделью двух токенов отмены (это одна и та же реализация одного и того же метода, здесь не дублируем).
 
 ---
 
@@ -1286,8 +1515,11 @@ public class SupportRequestPipeline : ISupportRequestPipeline
     private ITargetBlock<SupportRequest>? _inputBlock;
     private IDataflowBlock? _lastBlock;
 
-    public Task StartAsync(PipelineOptions options, CancellationToken appLifetimeCt)
+    public async Task StartAsync(PipelineOptions options, CancellationToken appLifetimeCt)
     {
+        if (_lastBlock != null)
+            await StopAsync(); // pipeline уже работал — сначала штатно гасим текущий граф
+
         _stopRequestedCts = new CancellationTokenSource();
         var stopToken = _stopRequestedCts.Token;
 
@@ -1299,9 +1531,8 @@ public class SupportRequestPipeline : ISupportRequestPipeline
             // stopToken сюда НЕ передаём
         };
 
-        // stopToken передаётся внутрь ClassifyAsync/ValidateAsync/AssignAsync/ProcessAsync
-
-        return Task.CompletedTask;
+        // здесь строится новый граф блоков; stopToken передаётся внутрь
+        // ClassifyAsync/ValidateAsync/AssignAsync/ProcessAsync как параметр ct
     }
 
     public async Task StopAsync()
@@ -1353,12 +1584,12 @@ public class SupportRequestPipeline : ISupportRequestPipeline
 15. Сделать валидацию входных данных.
 16. Сделать поведение при переполненной очереди: таймаут и `503`.
 17. Сделать `PipelineHub`.
-18. Сделать `PipelineBroadcastService`, который раз в 300–500 мс отправляет snapshot.
+18. Сделать `PipelineBroadcastService`, который раз в 300–500 мс отправляет snapshot под событием `SnapshotUpdated`.
 19. Сделать `TestDataGeneratorService` для генерации тестовых заявок.
-20. Сделать dashboard.
-21. Сделать форму создания заявки.
-22. Сделать так, чтобы форма отправляла JSON через `fetch` в `/api/requests`.
-23. Сделать визуальный pipeline на фронте.
+20. Настроить `Program.cs`: `AddControllers`, `AddSignalR`, DI, `UseDefaultFiles`/`UseStaticFiles`, `MapControllers`, `MapHub`.
+21. Сделать `wwwroot/index.html` — форму создания заявки, настройки, карточки метрик, визуальный pipeline и таблицу заявок одним статическим файлом, без Razor.
+22. Сделать `js/api.js` — обёртки над `fetch` ко всем эндпоинтам.
+23. Сделать `js/dashboard.js` — подключение к SignalR, обработчики кнопок, рендер UI.
 24. Интегрировать Core-логику стажёров.
 25. Подготовить Postman Collection.
 26. Подготовить демонстрационный сценарий защиты.
@@ -1380,17 +1611,19 @@ ResponsiveProcessingStudio.Web
 ├── Services
 │   ├── PipelineBroadcastService.cs
 │   └── TestDataGeneratorService.cs
-├── Views / Pages
-│   ├── Dashboard.cshtml
-│   └── CreateRequest.cshtml
-├── wwwroot/js
-│   └── dashboard.js
+├── wwwroot
+│   ├── index.html
+│   ├── js
+│   │   ├── api.js
+│   │   └── dashboard.js
+│   └── css
+│       └── site.css
 └── Program.cs
 ```
 
 ### Что ты должен показать на защите
 
-> Я отвечал за ASP.NET Core часть: Web UI, JSON REST API, SignalR, интеграцию с TPL Dataflow pipeline и демонстрацию через Postman. Веб-интерфейс и Postman используют один и тот же endpoint `/api/requests`, поэтому весь входящий поток заявок проходит через единый backend-путь.
+> Я отвечал за ASP.NET Core часть: backend — чистый Web API без серверного рендеринга, фронт — обычный статический `index.html` с CSS и JavaScript, обновляющийся через SignalR. Веб-интерфейс и Postman используют один и тот же endpoint `/api/requests`, поэтому весь входящий поток заявок проходит через единый backend-путь, а браузеру не нужен ни один сторонний фреймворк.
 
 ## Стажёр 1 — Domain, услуги, фабрика и классификация
 
@@ -1574,23 +1807,7 @@ Retry: 7
 Статус системы: Running
 ```
 
-Веб-форма создания заявки должна отправлять JSON через JavaScript:
-
-```javascript
-const request = {
-    clientName: document.getElementById("clientName").value,
-    serviceType: document.getElementById("serviceType").value || null,
-    message: document.getElementById("message").value
-};
-
-await fetch("/api/requests", {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json"
-    },
-    body: JSON.stringify(request)
-});
-```
+Разметка (`index.html`) и вся логика формы, кнопок и SignalR-подключения — в разделе 8.1, здесь не дублируем.
 
 ---
 
