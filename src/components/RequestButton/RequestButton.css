@@ -1,0 +1,65 @@
+.request-button {
+    width: 120px;
+    height: 40px;
+    border-radius: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.12);
+    transition: all .35s;
+    overflow: hidden;
+    position: relative;
+    border: none;
+}
+
+.request-button--variant-cancel {
+    background-color: rgba(35, 83, 71, 0.7);
+    border: 1px solid #235347;
+}
+
+.request-button--variant-details {
+    background-color: rgba(35, 83, 71, 0.7);
+    border: 1px solid #235347;
+}
+
+.request-button:after {
+    position: absolute;
+    content: "";
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100%;
+    transition: all .35s;
+    z-index: 0;
+}
+
+.request-button--variant-cancel:after {
+    background: #612e29;
+}
+
+.request-button--variant-details:after {
+    background: #296153;
+}
+
+.request-button:hover:after {
+    width: 100%;
+}
+
+.request-button__text {
+    position: relative;
+    z-index: 1;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 400;
+    font-size: 16px;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.request-button--variant-cancel .request-button__text {
+    color: rgba(142, 182, 155, 0.85);
+}
+
+.request-button--variant-details .request-button__text {
+    color: rgba(142, 182, 155, 0.85);
+}

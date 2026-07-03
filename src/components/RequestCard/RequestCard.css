@@ -1,0 +1,40 @@
+.request-card {
+    position: absolute;
+    width: 300px;
+    height: 150px;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.12), inset 0px 2px 4px rgba(255, 255, 255, 0);
+}
+
+.request-card--variant-success {
+    background-color: rgba(35, 83, 71, 0.7);
+    border: 1px solid #235347;
+}
+
+
+
+.request-card__title {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.2;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.request-card--variant-success .request-card__title {
+    color: rgba(142, 182, 155, 0.85);
+}
+
+.request-card--variant-error .request-card__title {
+    color: rgba(142, 182, 155, 0.85);
+}
+
+.request-card__buttons {
+    display: flex;
+    gap: 15px;
+}

@@ -1,0 +1,14 @@
+.main-menu {
+    background-color: #235347;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+}
+
+.main-menu__container {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}

@@ -1,0 +1,38 @@
+.info-box {
+    position: absolute;
+    top: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 50px;
+    border-radius: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.12), inset 0px 2px 4px rgba(255, 255, 255, 0);
+}
+
+.info-box--variant-success {
+    background-color: rgba(35, 83, 71, 0.7);
+    border: 1px solid #235347;
+}
+
+.info-box--variant-error {
+    background-color: #612e29;
+}
+
+.info-box__text {
+    font-family: 'Nunito', sans-serif;
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.info-box--variant-success .info-box__text {
+    color: rgba(142, 182, 155, 0.85);
+}
+
+.info-box--variant-error .info-box__text {
+    color: rgba(182, 142, 142, 0.85);
+}
