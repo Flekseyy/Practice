@@ -1,5 +1,7 @@
 using ResponsiveProcessingStudio.Core.Domain;
 
+namespace ResponsiveProcessingStudio.Core.Factories;
+
 public class BankServiceFactory
 {
     public BankService Create(ServiceType type) => type switch

@@ -1,4 +1,4 @@
-using ResponsiveProcessingStudio.Core.Domain;
+namespace ResponsiveProcessingStudio.Core.Domain;
 
 public class CreditService : BankService
 {
