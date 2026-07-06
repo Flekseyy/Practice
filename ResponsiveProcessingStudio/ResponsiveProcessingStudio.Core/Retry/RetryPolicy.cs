@@ -19,7 +19,7 @@ public class RetryPolicy : IRetryPolicy
         TimeSpan delay,
         CancellationToken ct)
     {
-        for (int attempt = 1; attempt < maxRetries + 1; attempt++)
+        for (int attempt = 1; attempt <= maxRetries + 1; attempt++)
         {
             try
             {
