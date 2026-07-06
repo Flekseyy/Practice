@@ -37,7 +37,7 @@ public class RetryPolicy : IRetryPolicy
 
                 if (attempt > maxRetries)
                 {
-                    request.Status = RequestStatus.Cancelled;
+                    request.Status = RequestStatus.Failed;
                     request.UpdatedAt = DateTime.UtcNow;
                     return request;
                 }
