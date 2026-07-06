@@ -29,11 +29,6 @@ public class RequestValidator : IRequestValidator
             throw new InvalidOperationException("Текст обращения не указан");
         }
 
-        if (request.ServiceType == ServiceType.Unknown)
-        {
-            throw new InvalidOperationException("Тип услуги не определён после классификации");
-        }
-
         await Task.Delay(300, ct);
 
         if (_errorSimulator.ShouldFail(_errorPercent))

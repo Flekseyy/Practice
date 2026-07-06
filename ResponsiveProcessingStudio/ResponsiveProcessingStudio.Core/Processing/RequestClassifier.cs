@@ -18,8 +18,9 @@ public class RequestClassifier : IRequestClassifier
     {
         if (request.ServiceType == ServiceType.Unknown)
         {
-            var text = request.Message.ToLowerInvariant();
-            var match = Keywords.FirstOrDefault(kv => kv.Value.Any(text.Contains));
+            var match = Keywords.FirstOrDefault(kv => 
+                kv.Value.Any(keyword => request.Message.Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+            
             request.ServiceType = match.Key == default && match.Value == null
                 ? ServiceType.Unknown
                 : match.Key;
