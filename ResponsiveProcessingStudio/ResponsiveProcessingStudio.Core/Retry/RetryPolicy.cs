@@ -33,11 +33,11 @@ public class RetryPolicy : IRetryPolicy
             }
             catch (Exception ex)
             {
-                request.LastError =  ex.Message;
+                request.LastError = ex.Message;
 
                 if (attempt > maxRetries)
                 {
-                    request.Status = RequestStatus.Cancelled;
+                    request.Status = RequestStatus.Failed;
                     request.UpdatedAt = DateTime.UtcNow;
                     return request;
                 }

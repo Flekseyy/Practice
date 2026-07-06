@@ -1,5 +1,4 @@
 using ResponsiveProcessingStudio.Core.Domain;
-using ResponsiveProcessingStudio.Core.Pipeline;
 
 namespace ResponsiveProcessingStudio.Core.Abstractions;
 
