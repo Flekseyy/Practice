@@ -19,7 +19,7 @@ public class RetryPolicy : IRetryPolicy
         TimeSpan delay,
         CancellationToken ct)
     {
-        for (int attempt = 0; attempt <= maxRetries + 1; attempt++)
+        for (int attempt = 1; attempt < maxRetries + 1; attempt++)
         {
             try
             {
@@ -33,7 +33,7 @@ public class RetryPolicy : IRetryPolicy
             }
             catch (Exception ex)
             {
-                request.LastError =  ex.Message;
+                request.LastError = ex.Message;
 
                 if (attempt > maxRetries)
                 {
