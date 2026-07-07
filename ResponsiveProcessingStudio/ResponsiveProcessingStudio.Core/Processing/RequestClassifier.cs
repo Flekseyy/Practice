@@ -7,11 +7,11 @@ public class RequestClassifier : IRequestClassifier
 {
     private static readonly Dictionary<ServiceType, string[]> Keywords = new()
     {
-        [ServiceType.Credit]        = ["кредит", "займ", "ставк"],
-        [ServiceType.DebitCard]     = ["карт", "оплатить картой"],
-        [ServiceType.Deposit]       = ["вклад", "депозит"],
-        [ServiceType.Mortgage]      = ["ипотек"],
-        [ServiceType.MoneyTransfer] = ["перевод", "не дошёл", "перевести"]
+        [ServiceType.Credit] = ["кредит", "займ", "ставк", "платеж по кредиту"],
+        [ServiceType.DebitCard] = ["карт", "оплатить картой", "банкомат", "пин"],
+        [ServiceType.Deposit] = ["вклад", "депозит", "накопительн"],
+        [ServiceType.Mortgage] = ["ипотек"],
+        [ServiceType.MoneyTransfer] = ["перевод", "не дошел", "не дошёл", "перевести", "получател"]
     };
 
     public Task<SupportRequest> ClassifyAsync(SupportRequest request, CancellationToken ct)
@@ -26,7 +26,6 @@ public class RequestClassifier : IRequestClassifier
                 : match.Key;
         }
         
-        request.Status = RequestStatus.Classifying;
         request.UpdatedAt = DateTime.UtcNow;
         
         return Task.FromResult(request);

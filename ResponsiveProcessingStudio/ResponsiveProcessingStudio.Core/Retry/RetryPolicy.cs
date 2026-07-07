@@ -17,13 +17,16 @@ public class RetryPolicy : IRetryPolicy
         SupportRequest request,
         int maxRetries,
         TimeSpan delay,
-        CancellationToken ct)
+        CancellationToken operationCt,
+        CancellationToken retryDelayCt)
     {
         for (int attempt = 1; attempt <= maxRetries + 1; attempt++)
         {
             try
             {
-                return await action(ct);
+                var result = await action(operationCt);
+                result.LastError = null;
+                return result;
             }
             catch (OperationCanceledException)
             {
@@ -44,11 +47,20 @@ public class RetryPolicy : IRetryPolicy
 
                 request.RetryCount++;
                 _metrics.IncrementRetry();
-                
-                await Task.Delay(delay, ct);
+
+                try
+                {
+                    await Task.Delay(delay, retryDelayCt);
+                }
+                catch (OperationCanceledException)
+                {
+                    request.Status = RequestStatus.Cancelled;
+                    request.UpdatedAt = DateTime.UtcNow;
+                    return request;
+                }
             }
-            
         }
+
         return request;
     }
 }

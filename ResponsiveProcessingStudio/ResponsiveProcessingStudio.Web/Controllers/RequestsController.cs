@@ -49,6 +49,25 @@ public sealed class RequestsController : ControllerBase
         return Accepted($"/api/requests/{request.Id}", SupportRequestResponseDto.FromDomain(request));
     }
 
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyCollection<SupportRequestResponseDto>), StatusCodes.Status200OK)]
+    public ActionResult<IReadOnlyCollection<SupportRequestResponseDto>> GetAll([FromQuery] RequestStatus? status = null)
+    {
+        IEnumerable<SupportRequest> requests = _stateStore.GetAll();
+
+        if (status.HasValue)
+        {
+            requests = requests.Where(request => request.Status == status.Value);
+        }
+
+        var result = requests
+            .OrderByDescending(request => request.UpdatedAt ?? request.CreatedAt)
+            .Select(SupportRequestResponseDto.FromDomain)
+            .ToArray();
+
+        return Ok(result);
+    }
+
     [HttpGet("recent")]
     [ProducesResponseType(typeof(IReadOnlyCollection<SupportRequestResponseDto>), StatusCodes.Status200OK)]
     public ActionResult<IReadOnlyCollection<SupportRequestResponseDto>> GetRecent([FromQuery] int count = 20)

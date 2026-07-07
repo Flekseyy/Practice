@@ -1,0 +1,178 @@
+{
+  "info": {
+    "name": "Responsive Processing Studio",
+    "description": "MVP checks for the support request processing pipeline: JSON requests, pipeline controls, snapshots, generation and stop.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5093"
+    }
+  ],
+  "item": [
+    {
+      "name": "Start pipeline",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"workersCount\": 4,\n  \"queueSize\": 50,\n  \"retriesCount\": 3,\n  \"retryDelayMs\": 500,\n  \"errorPercent\": 10\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pipeline/start",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pipeline",
+            "start"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create request with selected service type",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json; charset=utf-8"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientName\": \"Иван Сидоров\",\n  \"serviceType\": \"DebitCard\",\n  \"message\": \"Не проходит оплата картой в интернет-магазине\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/requests",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "requests"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create request with Unknown service type",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json; charset=utf-8"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientName\": \"Мария Иванова\",\n  \"serviceType\": null,\n  \"message\": \"Хочу узнать ставку по кредиту\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/requests",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "requests"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get pipeline snapshot",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/pipeline/snapshot",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pipeline",
+            "snapshot"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Generate 100 test requests",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/pipeline/generate?count=100",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pipeline",
+            "generate"
+          ],
+          "query": [
+            {
+              "key": "count",
+              "value": "100"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Start high-error retry scenario",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"workersCount\": 4,\n  \"queueSize\": 50,\n  \"retriesCount\": 3,\n  \"retryDelayMs\": 300,\n  \"errorPercent\": 50\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pipeline/start",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pipeline",
+            "start"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Stop pipeline",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/pipeline/stop",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pipeline",
+            "stop"
+          ]
+        }
+      }
+    }
+  ]
+}

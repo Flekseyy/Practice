@@ -15,10 +15,6 @@
                 <p>Платформа обработки обращений службы поддержки банка</p>
             </div>
         </div>
-        <div class="header-status">
-            <span class="status-pill" id="connectionStatus">Подключение...</span>
-            <span class="user-chip">Алексей Петров</span>
-        </div>
     </header>
 
     <main class="page-shell">
@@ -115,7 +111,7 @@
                     <label>
                         <span>Тип услуги</span>
                         <select id="serviceType">
-                            <option value="">Unknown / определить по тексту</option>
+                            <option value="">Другое</option>
                             <option value="Credit">Кредит</option>
                             <option value="DebitCard">Банковская карта</option>
                             <option value="Deposit">Вклад</option>
@@ -130,7 +126,7 @@
                 </label>
                 <div class="form-footer">
                     <span id="formMessage"></span>
-                    <button class="primary" type="submit">+ Создать заявку</button>
+                    <button class="primary" id="btnCreateRequest" type="submit">+ Создать заявку</button>
                 </div>
             </form>
         </section>
@@ -231,61 +227,43 @@
             </div>
         </section>
 
-        <section class="bottom-grid">
-            <article class="panel table-panel">
-                <div class="section-title">
-                    <h2>Последние заявки</h2>
-                </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Клиент</th>
-                                <th>Услуга</th>
-                                <th>Статус</th>
-                                <th>Отдел</th>
-                                <th>Исполнитель</th>
-                                <th>Retry</th>
-                                <th>Ошибка</th>
-                            </tr>
-                        </thead>
-                        <tbody id="requestsTable"></tbody>
-                    </table>
-                </div>
-            </article>
-
-            <aside class="side-stack">
-                <article class="panel">
-                    <div class="section-title compact">
-                        <h2>Лента событий</h2>
-                    </div>
-                    <ul class="event-list" id="eventList"></ul>
-                </article>
-                <article class="panel">
-                    <div class="section-title compact">
-                        <h2>SignalR соединение</h2>
-                        <span class="status-pill" id="signalrMode">Polling fallback</span>
-                    </div>
-                    <div class="connection-meter">
-                        <span></span>
-                    </div>
-                    <dl class="connection-details">
-                        <div><dt>Статус</dt><dd id="connectionDetails">Ожидание</dd></div>
-                        <div><dt>Последнее сообщение</dt><dd id="lastMessageTime">-</dd></div>
-                    </dl>
-                </article>
-            </aside>
-        </section>
     </main>
+
+    <div class="modal-backdrop" id="stageModal" hidden>
+        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="stageModalTitle">
+            <div class="modal-header">
+                <div>
+                    <h2 id="stageModalTitle">Заявки этапа</h2>
+                    <p id="stageModalSubtitle">Актуальный список заявок</p>
+                </div>
+                <button class="modal-close" id="stageModalClose" type="button" aria-label="Закрыть">x</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Клиент</th>
+                            <th>Услуга</th>
+                            <th>Статус</th>
+                            <th>Отдел</th>
+                            <th>Исполнитель</th>
+                            <th>Retry</th>
+                            <th>Ошибка</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stageRequestsTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
 
     <footer class="app-footer">
         <span>© 2026 Responsive Processing Studio</span>
-        <span>Web API + SignalR + статический frontend</span>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@10.0.0/dist/browser/signalr.min.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/dashboard.js"></script>
+    <script src="lib/signalr/signalr.min.js?v=20260707-pipeline-only"></script>
+    <script src="js/api.js?v=20260707-pipeline-only"></script>
+    <script src="js/dashboard.js?v=20260707-pipeline-only"></script>
 </body>
 </html>

@@ -63,6 +63,13 @@ button:active {
     opacity: 0.85;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+    transform: none;
+    box-shadow: none;
+}
+
 .primary {
     background: linear-gradient(135deg, #2f86ff, #0864dc);
 }
@@ -80,9 +87,6 @@ button:active {
 }
 
 .app-header {
-    position: sticky;
-    top: 0;
-    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -166,8 +170,7 @@ button:active {
 }
 
 .hero-grid,
-.work-grid,
-.bottom-grid {
+.work-grid {
     display: grid;
     gap: 16px;
 }
@@ -543,6 +546,19 @@ textarea:focus {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: linear-gradient(180deg, #ffffff, #f8fbff);
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stage-card:hover {
+    border-color: rgba(37, 99, 235, 0.32);
+    box-shadow: 0 16px 32px rgba(36, 54, 90, 0.1);
+    transform: translateY(-2px);
+}
+
+.stage-card:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.24);
+    outline-offset: 3px;
 }
 
 .stage-card:not(:last-child)::after {
@@ -560,18 +576,13 @@ textarea:focus {
     font-size: 30px;
 }
 
-.bottom-grid {
-    grid-template-columns: minmax(0, 1fr) 380px;
-    margin-top: 16px;
-}
-
 .table-wrap {
     overflow-x: auto;
 }
 
 table {
     width: 100%;
-    min-width: 860px;
+    min-width: 1080px;
     border-collapse: collapse;
 }
 
@@ -634,80 +645,75 @@ td {
     background: #eef2f7;
 }
 
-.side-stack {
-    display: grid;
-    gap: 16px;
-    align-content: start;
+.modal-open {
+    overflow: hidden;
 }
 
-.event-list {
-    display: grid;
-    gap: 12px;
-    min-height: 222px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+.modal-backdrop[hidden] {
+    display: none;
 }
 
-.event-list li {
-    display: grid;
-    grid-template-columns: 58px minmax(0, 1fr);
-    gap: 10px;
-    align-items: start;
-    color: var(--muted);
-    font-size: 13px;
-}
-
-.event-list span {
-    color: var(--blue);
-    font-variant-numeric: tabular-nums;
-}
-
-.event-list p {
-    margin: 0;
-}
-
-.event-list .muted {
-    display: block;
-}
-
-.connection-meter {
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
     display: grid;
     place-items: center;
-    width: 128px;
-    height: 128px;
-    margin: 8px auto 18px;
-    border-radius: 50%;
-    background: conic-gradient(var(--green) 0 74%, #e7edf6 74% 100%);
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.42);
 }
 
-.connection-meter span {
-    width: 94px;
-    height: 94px;
-    border-radius: 50%;
-    background: #ffffff;
-    border: 1px solid var(--line);
-}
-
-.connection-details {
+.modal-panel {
     display: grid;
-    gap: 10px;
-    margin: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(1180px, 100%);
+    max-height: min(760px, calc(100vh - 48px));
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #ffffff;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
 }
 
-.connection-details div {
+.modal-header {
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 18px;
+    gap: 20px;
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--line);
 }
 
-.connection-details dt {
+.modal-header h2 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.modal-header p {
+    margin: 8px 0 0;
     color: var(--muted);
 }
 
-.connection-details dd {
-    margin: 0;
-    font-weight: 700;
+.modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--panel-soft);
+    color: var(--text);
+    box-shadow: none;
+    font-size: 18px;
+}
+
+.modal-panel .table-wrap {
+    overflow: auto;
+    padding: 0 24px 24px;
 }
 
 .app-footer {
@@ -723,8 +729,7 @@ td {
 
 @media (max-width: 1180px) {
     .hero-grid,
-    .work-grid,
-    .bottom-grid {
+    .work-grid {
         grid-template-columns: 1fr;
     }
 

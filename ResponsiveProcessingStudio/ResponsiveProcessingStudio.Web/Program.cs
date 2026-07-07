@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ResponsiveProcessingStudio.Core.Abstractions;
 using ResponsiveProcessingStudio.Core.Factories;
 using ResponsiveProcessingStudio.Core.Pipeline;
@@ -10,7 +11,11 @@ using ResponsiveProcessingStudio.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddSignalR();
 
 builder.Services.AddSingleton<BankServiceFactory>();

@@ -15,6 +15,10 @@ window.api = {
         return fetch(`/api/pipeline/generate?count=${encodeURIComponent(count)}`, { method: "POST" }).then(readResponse);
     },
 
+    getRequestsByStatus(status) {
+        return fetch(`/api/requests?status=${encodeURIComponent(status)}`).then(readResponse);
+    },
+
     getSnapshot() {
         return fetch("/api/pipeline/snapshot").then(readResponse);
     }
