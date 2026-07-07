@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Responsive Processing Studio</title>
+    <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-mark">R</div>
+            <div>
+                <h1>Responsive Processing Studio</h1>
+                <p>Платформа обработки обращений службы поддержки банка</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        <section class="hero-grid">
+            <div class="hero-panel">
+                <div class="hero-copy">
+                    <h2>Управляйте обработкой обращений эффективно и в реальном времени</h2>
+                    <p>Мониторинг, настройка и анализ этапов обработки клиентских заявок в одном интерфейсе.</p>
+                    <div class="system-state">
+                        <span class="live-dot"></span>
+                        <span id="pipelineStateText">Pipeline остановлен</span>
+                    </div>
+                </div>
+                <div class="hero-visual" aria-hidden="true">
+                    <div class="cube cube-a"></div>
+                    <div class="cube cube-b"></div>
+                    <div class="shield">✓</div>
+                    <div class="platform"></div>
+                </div>
+            </div>
+
+            <aside class="today-panel">
+                <div class="section-title compact">
+                    <h2>Сегодня</h2>
+                    <span id="todayDate"></span>
+                </div>
+                <div class="today-stat">
+                    <span class="metric-icon blue">∑</span>
+                    <div>
+                        <p>Обработано заявок</p>
+                        <strong id="totalProcessed">0</strong>
+                    </div>
+                </div>
+                <div class="today-stat">
+                    <span class="metric-icon green">✓</span>
+                    <div>
+                        <p>Успешных обработок</p>
+                        <strong id="successRate">0%</strong>
+                    </div>
+                </div>
+                <div class="today-stat">
+                    <span class="metric-icon red">!</span>
+                    <div>
+                        <p>Ошибок</p>
+                        <strong id="errorRate">0%</strong>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <section class="action-bar" aria-label="Управление pipeline">
+            <button class="primary" id="btnStart" type="button">▶ Запустить</button>
+            <button class="danger" id="btnStop" type="button">■ Остановить</button>
+            <button class="accent" id="btnGenerate100" type="button">⚡ Сгенерировать 100</button>
+            <button class="success" id="btnApplySettings" type="button">⚙ Применить настройки</button>
+        </section>
+
+        <section class="work-grid">
+            <form class="panel settings-panel" id="settingsForm">
+                <div class="section-title">
+                    <h2>Настройки обработки</h2>
+                </div>
+                <label class="number-control">
+                    <span>Количество обработчиков</span>
+                    <input id="workersCount" type="number" min="1" max="64" value="5">
+                </label>
+                <label class="number-control">
+                    <span>Размер очереди</span>
+                    <input id="queueSize" type="number" min="1" max="10000" value="100">
+                </label>
+                <label class="number-control">
+                    <span>Retry попыток</span>
+                    <input id="retriesCount" type="number" min="0" max="10" value="3">
+                </label>
+                <label class="number-control">
+                    <span>Retry delay, мс</span>
+                    <input id="retryDelayMs" type="number" min="0" max="60000" value="500">
+                </label>
+                <label class="number-control">
+                    <span>Вероятность ошибки, %</span>
+                    <input id="errorPercent" type="number" min="0" max="100" value="10">
+                </label>
+            </form>
+
+            <form class="panel request-panel" id="requestForm">
+                <div class="section-title">
+                    <h2>Создание заявки</h2>
+                </div>
+                <div class="form-row">
+                    <label>
+                        <span>Имя клиента</span>
+                        <input id="clientName" type="text" maxlength="120" placeholder="Введите имя клиента" required>
+                    </label>
+                    <label>
+                        <span>Тип услуги</span>
+                        <select id="serviceType">
+                            <option value="">Другое</option>
+                            <option value="Credit">Кредит</option>
+                            <option value="DebitCard">Банковская карта</option>
+                            <option value="Deposit">Вклад</option>
+                            <option value="Mortgage">Ипотека</option>
+                            <option value="MoneyTransfer">Денежный перевод</option>
+                        </select>
+                    </label>
+                </div>
+                <label>
+                    <span>Текст обращения</span>
+                    <textarea id="message" maxlength="2000" placeholder="Опишите суть обращения клиента..." required></textarea>
+                </label>
+                <div class="form-footer">
+                    <span id="formMessage"></span>
+                    <button class="primary" id="btnCreateRequest" type="submit">+ Создать заявку</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <div class="section-title">
+                <h2>Обзор метрик</h2>
+            </div>
+            <div class="metrics-grid">
+                <article class="metric-card">
+                    <span class="metric-icon blue">⌛</span>
+                    <p>Ожидает</p>
+                    <strong id="waitingCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon violet">◇</span>
+                    <p>Классификация</p>
+                    <strong id="classifyingCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon blue">▣</span>
+                    <p>Проверка</p>
+                    <strong id="validatingCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon orange">◎</span>
+                    <p>Назначение</p>
+                    <strong id="assigningCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon cyan">○</span>
+                    <p>В обработке</p>
+                    <strong id="processingCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon green">✓</span>
+                    <p>Успешно</p>
+                    <strong id="completedCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon red">!</span>
+                    <p>Ошибки</p>
+                    <strong id="failedCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon slate">×</span>
+                    <p>Отменено</p>
+                    <strong id="cancelledCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon orange">↻</span>
+                    <p>Retry</p>
+                    <strong id="retryCount">0</strong>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-icon violet">∥</span>
+                    <p>Обработчиков</p>
+                    <strong id="workersCountView">0</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel pipeline-panel">
+            <div class="section-title">
+                <h2>Конвейер обработки</h2>
+            </div>
+            <div class="pipeline-track">
+                <article class="stage-card">
+                    <span>Очередь</span>
+                    <strong id="stageWaiting">0</strong>
+                    <small>ожидает</small>
+                </article>
+                <article class="stage-card">
+                    <span>Классификация</span>
+                    <strong id="stageClassifying">0</strong>
+                    <small>обрабатывается</small>
+                </article>
+                <article class="stage-card">
+                    <span>Проверка</span>
+                    <strong id="stageValidating">0</strong>
+                    <small>обрабатывается</small>
+                </article>
+                <article class="stage-card">
+                    <span>Назначение</span>
+                    <strong id="stageAssigning">0</strong>
+                    <small>обрабатывается</small>
+                </article>
+                <article class="stage-card">
+                    <span>Обработка</span>
+                    <strong id="stageProcessing">0</strong>
+                    <small>в работе</small>
+                </article>
+                <article class="stage-card">
+                    <span>Завершение</span>
+                    <strong id="stageCompleted">0</strong>
+                    <small>завершено</small>
+                </article>
+            </div>
+        </section>
+
+    </main>
+
+    <div class="modal-backdrop" id="stageModal" hidden>
+        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="stageModalTitle">
+            <div class="modal-header">
+                <div>
+                    <h2 id="stageModalTitle">Заявки этапа</h2>
+                    <p id="stageModalSubtitle">Актуальный список заявок</p>
+                </div>
+                <button class="modal-close" id="stageModalClose" type="button" aria-label="Закрыть">x</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Клиент</th>
+                            <th>Услуга</th>
+                            <th>Статус</th>
+                            <th>Отдел</th>
+                            <th>Исполнитель</th>
+                            <th>Retry</th>
+                            <th>Ошибка</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stageRequestsTable"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <footer class="app-footer">
+        <span>© 2026 Responsive Processing Studio</span>
+    </footer>
+
+    <script src="lib/signalr/signalr.min.js?v=20260707-pipeline-only"></script>
+    <script src="js/api.js?v=20260707-pipeline-only"></script>
+    <script src="js/dashboard.js?v=20260707-pipeline-only"></script>
+</body>
+</html>

@@ -9,5 +9,6 @@ public interface IRetryPolicy
         SupportRequest request,
         int maxRetries,
         TimeSpan delay,
-        CancellationToken ct);
+        CancellationToken operationCt,
+        CancellationToken retryDelayCt);
 }

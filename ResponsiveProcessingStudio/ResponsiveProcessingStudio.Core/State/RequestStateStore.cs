@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using ResponsiveProcessingStudio.Core.Abstractions;
 using ResponsiveProcessingStudio.Core.Domain;
 
-public class RequestStateStore : IRequestStateStore
+namespace ResponsiveProcessingStudio.Core.State;
+
+public sealed class RequestStateStore : IRequestStateStore
 {
     private readonly ConcurrentDictionary<Guid, SupportRequest> _requests = new();
 

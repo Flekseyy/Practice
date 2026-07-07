@@ -1,0 +1,4 @@
+**/bin/
+**/obj/
+.codex-tmp/
+.idea/

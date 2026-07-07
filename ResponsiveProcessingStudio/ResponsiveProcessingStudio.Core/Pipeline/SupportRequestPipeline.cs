@@ -12,8 +12,11 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
     private readonly IRequestProcessor _processor;
     private readonly IRequestStateStore _stateStore;
     private readonly IPipelineMetrics _metrics;
+    private readonly IRetryPolicy _retryPolicy;
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
 
-    private CancellationTokenSource? _stopRequestedCts;
+    private CancellationTokenSource? _runCts;
+    private CancellationTokenSource? _retryDelayCts;
     private PipelineOptions _options = new();
     private volatile PipelineStatus _status = PipelineStatus.Stopped;
 
@@ -30,7 +33,8 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
         IRequestAssigner assigner,
         IRequestProcessor processor,
         IRequestStateStore stateStore,
-        IPipelineMetrics metrics)
+        IPipelineMetrics metrics,
+        IRetryPolicy retryPolicy)
     {
         _classifier = classifier;
         _validator = validator;
@@ -38,111 +42,207 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
         _processor = processor;
         _stateStore = stateStore;
         _metrics = metrics;
+        _retryPolicy = retryPolicy;
     }
 
     public async Task StartAsync(PipelineOptions options, CancellationToken ct = default)
     {
-        if (_status != PipelineStatus.Stopped)
-            await StopAsync();
-
-        _options = options;
-        _stopRequestedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var processToken = _stopRequestedCts.Token;
-
-        var blockOptions = new ExecutionDataflowBlockOptions
-        {
-            BoundedCapacity = options.QueueSize,
-            MaxDegreeOfParallelism = options.WorkersCount,
-            EnsureOrdered = false
-        };
-
-        _inputBuffer = new BufferBlock<SupportRequest>(new DataflowBlockOptions
-        {
-            BoundedCapacity = options.QueueSize
-        });
-
-        _classifierBlock = new TransformBlock<SupportRequest, SupportRequest>(
-            req => SafeProcessAsync(req, _classifier.ClassifyAsync, processToken, RequestStatus.Classifying),
-            blockOptions);
-
-        _validatorBlock = new TransformBlock<SupportRequest, SupportRequest>(
-            req => SafeProcessAsync(req, _validator.ValidateAsync, processToken, RequestStatus.Validating),
-            blockOptions);
-
-        _assignerBlock = new TransformBlock<SupportRequest, SupportRequest>(
-            req => SafeProcessAsync(req, _assigner.AssignAsync, processToken, RequestStatus.Assigning),
-            blockOptions);
-
-        _processorBlock = new TransformBlock<SupportRequest, SupportRequest>(
-            req => SafeProcessAsync(req, _processor.ProcessAsync, processToken, RequestStatus.Processing),
-            blockOptions);
-
-        _finalizeBlock = new ActionBlock<SupportRequest>(
-            request =>
-            {
-                if (request.Status == RequestStatus.Completed)
-                {
-                    _metrics.OnStatusChanged(RequestStatus.Processing, RequestStatus.Completed);
-                }
-            },
-            new ExecutionDataflowBlockOptions
-            {
-                MaxDegreeOfParallelism = DataflowBlockOptions.Unbounded
-            });
-
-        var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
-
-        _inputBuffer.LinkTo(_classifierBlock, linkOptions);
-        _classifierBlock.LinkTo(_validatorBlock, linkOptions);
-        _validatorBlock.LinkTo(_assignerBlock, linkOptions);
-        _assignerBlock.LinkTo(_processorBlock, linkOptions);
-        _processorBlock.LinkTo(_finalizeBlock, linkOptions);
-
-        _status = PipelineStatus.Running;
-    }
-
-    private async Task<SupportRequest> SafeProcessAsync(
-        SupportRequest req,
-        Func<SupportRequest, CancellationToken, Task<SupportRequest>> action,
-        CancellationToken ct,
-        RequestStatus nextStatus)
-    {
-        if (req.Status == RequestStatus.Cancelled || req.Status == RequestStatus.Failed)
-            return req;
-
-        var oldStatus = req.Status;
+        await _lifecycleGate.WaitAsync(ct);
         try
         {
-            req.Status = nextStatus;
-            _stateStore.UpdateStatus(req.Id, nextStatus);
-            _metrics.OnStatusChanged(oldStatus, nextStatus);
+            if (_status != PipelineStatus.Stopped)
+            {
+                await StopCoreAsync();
+            }
 
-            var result = await action(req, ct);
+            _options = NormalizeOptions(options);
+            _runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _retryDelayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+            var transformOptions = new ExecutionDataflowBlockOptions
+            {
+                BoundedCapacity = _options.QueueSize,
+                MaxDegreeOfParallelism = _options.WorkersCount,
+                EnsureOrdered = false
+            };
+
+            _inputBuffer = new BufferBlock<SupportRequest>(new DataflowBlockOptions
+            {
+                BoundedCapacity = _options.QueueSize
+            });
+
+            _classifierBlock = new TransformBlock<SupportRequest, SupportRequest>(
+                req => RunStageAsync(req, RequestStatus.Classifying, _classifier.ClassifyAsync),
+                transformOptions);
+
+            _validatorBlock = new TransformBlock<SupportRequest, SupportRequest>(
+                req => RunStageWithRetryAsync(
+                    req,
+                    RequestStatus.Validating,
+                    (request, stageCt) => _validator.ValidateAsync(request, _options.ErrorPercent, stageCt)),
+                transformOptions);
+
+            _assignerBlock = new TransformBlock<SupportRequest, SupportRequest>(
+                req => RunStageAsync(req, RequestStatus.Assigning, _assigner.AssignAsync),
+                transformOptions);
+
+            _processorBlock = new TransformBlock<SupportRequest, SupportRequest>(
+                req => RunStageWithRetryAsync(
+                    req,
+                    RequestStatus.Processing,
+                    (request, stageCt) => _processor.ProcessAsync(request, _options.ErrorPercent, stageCt)),
+                transformOptions);
+
+            _finalizeBlock = new ActionBlock<SupportRequest>(
+                request =>
+                {
+                    _stateStore.Update(request);
+                },
+                new ExecutionDataflowBlockOptions
+                {
+                    BoundedCapacity = _options.QueueSize,
+                    MaxDegreeOfParallelism = _options.WorkersCount,
+                    EnsureOrdered = false
+                });
+
+            var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
+
+            _inputBuffer.LinkTo(_classifierBlock, linkOptions);
+            _classifierBlock.LinkTo(_validatorBlock, linkOptions);
+            _validatorBlock.LinkTo(_assignerBlock, linkOptions);
+            _assignerBlock.LinkTo(_processorBlock, linkOptions);
+            _processorBlock.LinkTo(_finalizeBlock, linkOptions);
+
+            _status = PipelineStatus.Running;
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task<SupportRequest> RunStageAsync(
+        SupportRequest request,
+        RequestStatus stageStatus,
+        Func<SupportRequest, CancellationToken, Task<SupportRequest>> action)
+    {
+        if (IsTerminal(request.Status))
+        {
+            return request;
+        }
+
+        MoveToStatus(request, stageStatus);
+
+        try
+        {
+            var result = await action(request, _runCts?.Token ?? CancellationToken.None);
             _stateStore.Update(result);
             return result;
         }
         catch (OperationCanceledException)
         {
-            req.Status = RequestStatus.Cancelled;
-            _stateStore.UpdateStatus(req.Id, RequestStatus.Cancelled);
-            _metrics.OnStatusChanged(nextStatus, RequestStatus.Cancelled);
-            return req;
+            MarkTerminal(request, RequestStatus.Cancelled);
+            return request;
         }
         catch (Exception ex)
         {
-            req.Status = RequestStatus.Failed;
-            req.LastError = ex.Message;
-            _stateStore.Update(req);
-            _metrics.OnStatusChanged(nextStatus, RequestStatus.Failed);
-            return req;
+            MarkFailed(request, ex);
+            return request;
         }
+    }
+
+    private async Task<SupportRequest> RunStageWithRetryAsync(
+        SupportRequest request,
+        RequestStatus stageStatus,
+        Func<SupportRequest, CancellationToken, Task<SupportRequest>> action)
+    {
+        if (IsTerminal(request.Status))
+        {
+            return request;
+        }
+
+        MoveToStatus(request, stageStatus);
+
+        var result = await _retryPolicy.ExecuteAsync(
+            stageCt => action(request, stageCt),
+            request,
+            _options.RetriesCount,
+            _options.RetryDelay,
+            _runCts?.Token ?? CancellationToken.None,
+            _retryDelayCts?.Token ?? CancellationToken.None);
+
+        if (result.Status != stageStatus)
+        {
+            _metrics.OnStatusChanged(stageStatus, result.Status);
+        }
+
+        if (IsTerminal(result.Status))
+        {
+            _stateStore.Update(result);
+            return result;
+        }
+
+        _stateStore.Update(result);
+        return result;
+    }
+
+    private void MoveToStatus(SupportRequest request, RequestStatus newStatus)
+    {
+        var oldStatus = request.Status;
+        request.Status = newStatus;
+        request.UpdatedAt = DateTime.UtcNow;
+        request.LastError = null;
+        _stateStore.Update(request);
+        _metrics.OnStatusChanged(oldStatus, newStatus);
+    }
+
+    private void MarkTerminal(SupportRequest request, RequestStatus status)
+    {
+        var oldStatus = request.Status;
+        request.Status = status;
+        request.UpdatedAt = DateTime.UtcNow;
+        _stateStore.Update(request);
+        _metrics.OnStatusChanged(oldStatus, status);
+    }
+
+    private void MarkFailed(SupportRequest request, Exception ex)
+    {
+        var oldStatus = request.Status;
+        request.Status = RequestStatus.Failed;
+        request.LastError = ex.Message;
+        request.UpdatedAt = DateTime.UtcNow;
+        _stateStore.Update(request);
+        _metrics.OnStatusChanged(oldStatus, RequestStatus.Failed);
+    }
+
+    private static bool IsTerminal(RequestStatus status)
+    {
+        return status is RequestStatus.Completed or RequestStatus.Failed or RequestStatus.Cancelled;
+    }
+
+    private static PipelineOptions NormalizeOptions(PipelineOptions options)
+    {
+        return new PipelineOptions
+        {
+            WorkersCount = Math.Clamp(options.WorkersCount, 1, 64),
+            QueueSize = Math.Clamp(options.QueueSize, 1, 10_000),
+            RetriesCount = Math.Clamp(options.RetriesCount, 0, 10),
+            RetryDelay = options.RetryDelay < TimeSpan.Zero
+                ? TimeSpan.Zero
+                : options.RetryDelay,
+            ErrorPercent = Math.Clamp(options.ErrorPercent, 0, 100)
+        };
     }
 
     public async Task<bool> SendAsync(SupportRequest request, CancellationToken ct)
     {
         if (_inputBuffer == null || _status != PipelineStatus.Running)
+        {
             return false;
+        }
 
+        request.Status = RequestStatus.Waiting;
+        request.UpdatedAt = DateTime.UtcNow;
         _stateStore.Add(request);
         _metrics.OnStatusChanged(RequestStatus.Created, RequestStatus.Waiting);
 
@@ -151,38 +251,80 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
 
         try
         {
-            return await _inputBuffer.SendAsync(request, timeoutCts.Token);
+            var accepted = await _inputBuffer.SendAsync(request, timeoutCts.Token);
+            if (accepted)
+            {
+                return true;
+            }
+
+            MarkFailed(request, new InvalidOperationException("Pipeline stopped accepting requests"));
+            return false;
         }
         catch (OperationCanceledException)
         {
-            request.Status = RequestStatus.Failed;
-            request.LastError = "Очередь заявок переполнена";
-            _stateStore.Update(request);
+            MarkFailed(request, new InvalidOperationException("Очередь заявок переполнена"));
             return false;
         }
     }
 
     public async Task StopAsync()
     {
-        if (_inputBuffer == null) return;
+        await _lifecycleGate.WaitAsync();
+        try
+        {
+            await StopCoreAsync();
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task StopCoreAsync()
+    {
+        if (_inputBuffer == null || _status == PipelineStatus.Stopped)
+        {
+            return;
+        }
 
         _status = PipelineStatus.Stopping;
-        _stopRequestedCts?.Cancel();
+        _retryDelayCts?.Cancel();
 
-        try { _inputBuffer.Complete(); } catch { /* ignored */ }
-        
+        try
+        {
+            _inputBuffer.Complete();
+        }
+        catch
+        {
+            // Dataflow Complete is best-effort during shutdown.
+        }
+
         if (_finalizeBlock != null)
         {
             try
             {
                 await _finalizeBlock.Completion;
             }
-            catch (TaskCanceledException) { /* ignored */ }
-            catch (Exception) { /* ignored */ }
+            catch (TaskCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+            }
         }
 
-        _stopRequestedCts?.Dispose();
-        _stopRequestedCts = null;
+        _retryDelayCts?.Dispose();
+        _retryDelayCts = null;
+        _runCts?.Dispose();
+        _runCts = null;
+
+        _inputBuffer = null;
+        _classifierBlock = null;
+        _validatorBlock = null;
+        _assignerBlock = null;
+        _processorBlock = null;
+        _finalizeBlock = null;
+
         _status = PipelineStatus.Stopped;
     }
 
@@ -209,7 +351,10 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
 
     public void Dispose()
     {
-        _stopRequestedCts?.Cancel();
-        _stopRequestedCts?.Dispose();
+        _retryDelayCts?.Cancel();
+        _runCts?.Cancel();
+        _retryDelayCts?.Dispose();
+        _runCts?.Dispose();
+        _lifecycleGate.Dispose();
     }
 }
