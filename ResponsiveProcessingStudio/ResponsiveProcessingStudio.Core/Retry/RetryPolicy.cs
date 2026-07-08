@@ -3,15 +3,8 @@ using ResponsiveProcessingStudio.Core.Domain;
 
 namespace ResponsiveProcessingStudio.Core.Retry;
 
-public class RetryPolicy : IRetryPolicy
+public class RetryPolicy(IPipelineMetrics metrics) : IRetryPolicy
 {
-    private readonly IPipelineMetrics _metrics;
-    
-    public RetryPolicy(IPipelineMetrics metrics)
-    {
-        _metrics = metrics;
-    }
-
     public async Task<SupportRequest> ExecuteAsync(
         Func<CancellationToken, Task<SupportRequest>> action,
         SupportRequest request,
@@ -46,7 +39,7 @@ public class RetryPolicy : IRetryPolicy
                 }
 
                 request.RetryCount++;
-                _metrics.IncrementRetry();
+                metrics.IncrementRetry();
 
                 try
                 {

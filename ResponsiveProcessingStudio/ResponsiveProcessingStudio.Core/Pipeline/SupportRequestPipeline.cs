@@ -4,15 +4,16 @@ using ResponsiveProcessingStudio.Core.Domain;
 
 namespace ResponsiveProcessingStudio.Core.Pipeline;
 
-public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposable
+public sealed class SupportRequestPipeline(
+    IRequestClassifier classifier,
+    IRequestValidator validator,
+    IRequestAssigner assigner,
+    IRequestProcessor processor,
+    IRequestStateStore stateStore,
+    IPipelineMetrics metrics,
+    IRetryPolicy retryPolicy)
+    : ISupportRequestPipeline, IDisposable
 {
-    private readonly IRequestClassifier _classifier;
-    private readonly IRequestValidator _validator;
-    private readonly IRequestAssigner _assigner;
-    private readonly IRequestProcessor _processor;
-    private readonly IRequestStateStore _stateStore;
-    private readonly IPipelineMetrics _metrics;
-    private readonly IRetryPolicy _retryPolicy;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
 
     private CancellationTokenSource? _runCts;
@@ -26,24 +27,6 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
     private TransformBlock<SupportRequest, SupportRequest>? _assignerBlock;
     private TransformBlock<SupportRequest, SupportRequest>? _processorBlock;
     private ActionBlock<SupportRequest>? _finalizeBlock;
-
-    public SupportRequestPipeline(
-        IRequestClassifier classifier,
-        IRequestValidator validator,
-        IRequestAssigner assigner,
-        IRequestProcessor processor,
-        IRequestStateStore stateStore,
-        IPipelineMetrics metrics,
-        IRetryPolicy retryPolicy)
-    {
-        _classifier = classifier;
-        _validator = validator;
-        _assigner = assigner;
-        _processor = processor;
-        _stateStore = stateStore;
-        _metrics = metrics;
-        _retryPolicy = retryPolicy;
-    }
 
     public async Task StartAsync(PipelineOptions options, CancellationToken ct = default)
     {
@@ -72,31 +55,31 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
             });
 
             _classifierBlock = new TransformBlock<SupportRequest, SupportRequest>(
-                req => RunStageAsync(req, RequestStatus.Classifying, _classifier.ClassifyAsync),
+                req => RunStageAsync(req, RequestStatus.Classifying, classifier.ClassifyAsync),
                 transformOptions);
 
             _validatorBlock = new TransformBlock<SupportRequest, SupportRequest>(
                 req => RunStageWithRetryAsync(
                     req,
                     RequestStatus.Validating,
-                    (request, stageCt) => _validator.ValidateAsync(request, _options.ErrorPercent, stageCt)),
+                    (request, stageCt) => validator.ValidateAsync(request, _options.ErrorPercent, stageCt)),
                 transformOptions);
 
             _assignerBlock = new TransformBlock<SupportRequest, SupportRequest>(
-                req => RunStageAsync(req, RequestStatus.Assigning, _assigner.AssignAsync),
+                req => RunStageAsync(req, RequestStatus.Assigning, assigner.AssignAsync),
                 transformOptions);
 
             _processorBlock = new TransformBlock<SupportRequest, SupportRequest>(
                 req => RunStageWithRetryAsync(
                     req,
                     RequestStatus.Processing,
-                    (request, stageCt) => _processor.ProcessAsync(request, _options.ErrorPercent, stageCt)),
+                    (request, stageCt) => processor.ProcessAsync(request, _options.ErrorPercent, stageCt)),
                 transformOptions);
 
             _finalizeBlock = new ActionBlock<SupportRequest>(
                 request =>
                 {
-                    _stateStore.Update(request);
+                    stateStore.Update(request);
                 },
                 new ExecutionDataflowBlockOptions
                 {
@@ -136,7 +119,7 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
         try
         {
             var result = await action(request, _runCts?.Token ?? CancellationToken.None);
-            _stateStore.Update(result);
+            stateStore.Update(result);
             return result;
         }
         catch (OperationCanceledException)
@@ -163,7 +146,7 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
 
         MoveToStatus(request, stageStatus);
 
-        var result = await _retryPolicy.ExecuteAsync(
+        var result = await retryPolicy.ExecuteAsync(
             stageCt => action(request, stageCt),
             request,
             _options.RetriesCount,
@@ -173,16 +156,16 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
 
         if (result.Status != stageStatus)
         {
-            _metrics.OnStatusChanged(stageStatus, result.Status);
+            metrics.OnStatusChanged(stageStatus, result.Status);
         }
 
         if (IsTerminal(result.Status))
         {
-            _stateStore.Update(result);
+            stateStore.Update(result);
             return result;
         }
 
-        _stateStore.Update(result);
+        stateStore.Update(result);
         return result;
     }
 
@@ -192,8 +175,8 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
         request.Status = newStatus;
         request.UpdatedAt = DateTime.UtcNow;
         request.LastError = null;
-        _stateStore.Update(request);
-        _metrics.OnStatusChanged(oldStatus, newStatus);
+        stateStore.Update(request);
+        metrics.OnStatusChanged(oldStatus, newStatus);
     }
 
     private void MarkTerminal(SupportRequest request, RequestStatus status)
@@ -201,8 +184,8 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
         var oldStatus = request.Status;
         request.Status = status;
         request.UpdatedAt = DateTime.UtcNow;
-        _stateStore.Update(request);
-        _metrics.OnStatusChanged(oldStatus, status);
+        stateStore.Update(request);
+        metrics.OnStatusChanged(oldStatus, status);
     }
 
     private void MarkFailed(SupportRequest request, Exception ex)
@@ -211,8 +194,8 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
         request.Status = RequestStatus.Failed;
         request.LastError = ex.Message;
         request.UpdatedAt = DateTime.UtcNow;
-        _stateStore.Update(request);
-        _metrics.OnStatusChanged(oldStatus, RequestStatus.Failed);
+        stateStore.Update(request);
+        metrics.OnStatusChanged(oldStatus, RequestStatus.Failed);
     }
 
     private static bool IsTerminal(RequestStatus status)
@@ -243,8 +226,8 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
 
         request.Status = RequestStatus.Waiting;
         request.UpdatedAt = DateTime.UtcNow;
-        _stateStore.Add(request);
-        _metrics.OnStatusChanged(RequestStatus.Created, RequestStatus.Waiting);
+        stateStore.Add(request);
+        metrics.OnStatusChanged(RequestStatus.Created, RequestStatus.Waiting);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
@@ -330,7 +313,7 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
 
     public PipelineSnapshot GetSnapshot()
     {
-        var all = _stateStore.GetAll();
+        var all = stateStore.GetAll();
 
         return new PipelineSnapshot
         {
@@ -345,7 +328,7 @@ public sealed class SupportRequestPipeline : ISupportRequestPipeline, IDisposabl
             RetryCount = all.Sum(r => r.RetryCount),
             WorkersCount = _options.WorkersCount,
             PipelineStatus = _status.ToString(),
-            RecentRequests = _stateStore.GetRecent(20)
+            RecentRequests = stateStore.GetRecent(20)
         };
     }
 

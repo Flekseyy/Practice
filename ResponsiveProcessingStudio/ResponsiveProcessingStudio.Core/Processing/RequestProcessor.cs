@@ -3,24 +3,16 @@ using ResponsiveProcessingStudio.Core.Domain;
 
 namespace ResponsiveProcessingStudio.Core.Processing;
 
-public class RequestProcessor : IRequestProcessor
+public class RequestProcessor(IErrorSimulator errorSimulator, int processingDelayMs = 1000)
+    : IRequestProcessor
 {
-    private readonly IErrorSimulator _errorSimulator;
-    private readonly int _processingDelayMs;
-
-    public RequestProcessor(IErrorSimulator errorSimulator, int processingDelayMs = 1000)
-    {
-        _errorSimulator = errorSimulator;
-        _processingDelayMs = processingDelayMs;
-    }
-
     public async Task<SupportRequest> ProcessAsync(SupportRequest request, int errorPercent, CancellationToken ct)
     {
         request.UpdatedAt = DateTime.UtcNow;
 
-        await Task.Delay(_processingDelayMs, ct);
+        await Task.Delay(processingDelayMs, ct);
 
-        if (_errorSimulator.ShouldFail(errorPercent))
+        if (errorSimulator.ShouldFail(errorPercent))
         {
             throw new InvalidOperationException("Сбой при обработке заявки (симуляция)");
         }

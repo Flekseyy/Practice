@@ -7,17 +7,9 @@ namespace ResponsiveProcessingStudio.Web.Controllers;
 
 [ApiController]
 [Route("api/requests")]
-public sealed class RequestsController : ControllerBase
+public sealed class RequestsController(ISupportRequestPipeline pipeline, IRequestStateStore stateStore)
+    : ControllerBase
 {
-    private readonly ISupportRequestPipeline _pipeline;
-    private readonly IRequestStateStore _stateStore;
-
-    public RequestsController(ISupportRequestPipeline pipeline, IRequestStateStore stateStore)
-    {
-        _pipeline = pipeline;
-        _stateStore = stateStore;
-    }
-
     [HttpPost]
     [ProducesResponseType(typeof(SupportRequestResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -34,10 +26,10 @@ public sealed class RequestsController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
 
-        var accepted = await _pipeline.SendAsync(request, ct);
+        var accepted = await pipeline.SendAsync(request, ct);
         if (!accepted)
         {
-            var snapshot = _pipeline.GetSnapshot();
+            var snapshot = pipeline.GetSnapshot();
             if (!string.Equals(snapshot.PipelineStatus, "Running", StringComparison.OrdinalIgnoreCase))
             {
                 return Conflict(new { message = "Pipeline is not running. Start it before creating requests." });
@@ -53,7 +45,7 @@ public sealed class RequestsController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyCollection<SupportRequestResponseDto>), StatusCodes.Status200OK)]
     public ActionResult<IReadOnlyCollection<SupportRequestResponseDto>> GetAll([FromQuery] RequestStatus? status = null)
     {
-        IEnumerable<SupportRequest> requests = _stateStore.GetAll();
+        IEnumerable<SupportRequest> requests = stateStore.GetAll();
 
         if (status.HasValue)
         {
@@ -73,7 +65,7 @@ public sealed class RequestsController : ControllerBase
     public ActionResult<IReadOnlyCollection<SupportRequestResponseDto>> GetRecent([FromQuery] int count = 20)
     {
         var safeCount = Math.Clamp(count, 1, 100);
-        var requests = _stateStore.GetRecent(safeCount)
+        var requests = stateStore.GetRecent(safeCount)
             .Select(SupportRequestResponseDto.FromDomain)
             .ToArray();
 

@@ -7,43 +7,33 @@ namespace ResponsiveProcessingStudio.Web.Controllers;
 
 [ApiController]
 [Route("api/pipeline")]
-public sealed class PipelineController : ControllerBase
+public sealed class PipelineController(
+    ISupportRequestPipeline pipeline,
+    TestDataGeneratorService generator,
+    IHostApplicationLifetime appLifetime)
+    : ControllerBase
 {
-    private readonly ISupportRequestPipeline _pipeline;
-    private readonly TestDataGeneratorService _generator;
-    private readonly IHostApplicationLifetime _appLifetime;
-
-    public PipelineController(
-        ISupportRequestPipeline pipeline,
-        TestDataGeneratorService generator,
-        IHostApplicationLifetime appLifetime)
-    {
-        _pipeline = pipeline;
-        _generator = generator;
-        _appLifetime = appLifetime;
-    }
-
     [HttpGet("snapshot")]
     [ProducesResponseType(typeof(PipelineSnapshotDto), StatusCodes.Status200OK)]
     public ActionResult<PipelineSnapshotDto> GetSnapshot()
     {
-        return Ok(PipelineSnapshotDto.FromDomain(_pipeline.GetSnapshot()));
+        return Ok(PipelineSnapshotDto.FromDomain(pipeline.GetSnapshot()));
     }
 
     [HttpPost("start")]
     [ProducesResponseType(typeof(PipelineSnapshotDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<PipelineSnapshotDto>> StartAsync(PipelineOptionsDto options)
     {
-        await _pipeline.StartAsync(options.ToPipelineOptions(), _appLifetime.ApplicationStopping);
-        return Ok(PipelineSnapshotDto.FromDomain(_pipeline.GetSnapshot()));
+        await pipeline.StartAsync(options.ToPipelineOptions(), appLifetime.ApplicationStopping);
+        return Ok(PipelineSnapshotDto.FromDomain(pipeline.GetSnapshot()));
     }
 
     [HttpPost("stop")]
     [ProducesResponseType(typeof(PipelineSnapshotDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<PipelineSnapshotDto>> StopAsync()
     {
-        await _pipeline.StopAsync();
-        return Ok(PipelineSnapshotDto.FromDomain(_pipeline.GetSnapshot()));
+        await pipeline.StopAsync();
+        return Ok(PipelineSnapshotDto.FromDomain(pipeline.GetSnapshot()));
     }
 
     [HttpPost("generate")]
@@ -51,7 +41,7 @@ public sealed class PipelineController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<GenerateRequestsResultDto>> GenerateAsync([FromQuery] int count = 100, CancellationToken ct = default)
     {
-        var snapshot = _pipeline.GetSnapshot();
+        var snapshot = pipeline.GetSnapshot();
         if (!string.Equals(snapshot.PipelineStatus, "Running", StringComparison.OrdinalIgnoreCase))
         {
             return Conflict(new { message = "Pipeline is not running. Start it before generating requests." });
@@ -60,9 +50,9 @@ public sealed class PipelineController : ControllerBase
         var safeCount = Math.Clamp(count, 1, 1_000);
         var accepted = 0;
 
-        foreach (var request in _generator.CreateRequests(safeCount))
+        foreach (var request in generator.CreateRequests(safeCount))
         {
-            if (await _pipeline.SendAsync(request, ct))
+            if (await pipeline.SendAsync(request, ct))
             {
                 accepted++;
             }

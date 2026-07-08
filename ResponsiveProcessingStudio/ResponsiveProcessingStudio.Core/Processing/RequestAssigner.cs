@@ -4,15 +4,8 @@ using ResponsiveProcessingStudio.Core.Factories;
 
 namespace ResponsiveProcessingStudio.Core.Processing;
 
-public class RequestAssigner : IRequestAssigner
+public class RequestAssigner(BankServiceFactory factory) : IRequestAssigner
 {
-    private readonly BankServiceFactory _factory;
-
-    public RequestAssigner(BankServiceFactory factory)
-    {
-        _factory = factory;
-    }
-
     private static readonly Dictionary<ServiceType, string> Staff = new()
     {
         [ServiceType.Credit] = "А. Смирнов",
@@ -27,7 +20,7 @@ public class RequestAssigner : IRequestAssigner
     {
         request.AssignedDepartment = request.ServiceType == ServiceType.Unknown
             ? "Общий отдел"
-            : _factory.Create(request.ServiceType).RequiredDepartment;
+            : factory.Create(request.ServiceType).RequiredDepartment;
 
         request.AssignedHandler = Staff[request.ServiceType];
         request.UpdatedAt = DateTime.UtcNow;

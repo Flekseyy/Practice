@@ -5,23 +5,13 @@ using ResponsiveProcessingStudio.Web.Hubs;
 
 namespace ResponsiveProcessingStudio.Web.Services;
 
-public sealed class PipelineBroadcastService : BackgroundService
+public sealed class PipelineBroadcastService(
+    ISupportRequestPipeline pipeline,
+    IHubContext<PipelineHub> hubContext,
+    ILogger<PipelineBroadcastService> logger)
+    : BackgroundService
 {
     private static readonly TimeSpan BroadcastInterval = TimeSpan.FromMilliseconds(400);
-
-    private readonly ISupportRequestPipeline _pipeline;
-    private readonly IHubContext<PipelineHub> _hubContext;
-    private readonly ILogger<PipelineBroadcastService> _logger;
-
-    public PipelineBroadcastService(
-        ISupportRequestPipeline pipeline,
-        IHubContext<PipelineHub> hubContext,
-        ILogger<PipelineBroadcastService> logger)
-    {
-        _pipeline = pipeline;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -31,8 +21,8 @@ public sealed class PipelineBroadcastService : BackgroundService
         {
             try
             {
-                var snapshot = PipelineSnapshotDto.FromDomain(_pipeline.GetSnapshot());
-                await _hubContext.Clients.All.SendAsync("pipelineSnapshot", snapshot, stoppingToken);
+                var snapshot = PipelineSnapshotDto.FromDomain(pipeline.GetSnapshot());
+                await hubContext.Clients.All.SendAsync("pipelineSnapshot", snapshot, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -40,7 +30,7 @@ public sealed class PipelineBroadcastService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to broadcast pipeline snapshot.");
+                logger.LogWarning(ex, "Failed to broadcast pipeline snapshot.");
             }
         }
     }

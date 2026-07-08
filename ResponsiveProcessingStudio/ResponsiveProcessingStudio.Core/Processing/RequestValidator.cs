@@ -3,15 +3,8 @@ using ResponsiveProcessingStudio.Core.Domain;
 
 namespace ResponsiveProcessingStudio.Core.Processing;
 
-public class RequestValidator : IRequestValidator
+public class RequestValidator(IErrorSimulator errorSimulator) : IRequestValidator
 {
-    private readonly IErrorSimulator _errorSimulator;
-
-    public RequestValidator(IErrorSimulator errorSimulator)
-    {
-        _errorSimulator = errorSimulator;
-    }
-
     public async Task<SupportRequest> ValidateAsync(SupportRequest request, int errorPercent, CancellationToken ct)
     {
         request.UpdatedAt = DateTime.UtcNow;
@@ -28,7 +21,7 @@ public class RequestValidator : IRequestValidator
 
         await Task.Delay(300, ct);
 
-        if (_errorSimulator.ShouldFail(errorPercent))
+        if (errorSimulator.ShouldFail(errorPercent))
         {
             throw new InvalidOperationException("Сбой при проверке заявки (симуляция)");
         }
