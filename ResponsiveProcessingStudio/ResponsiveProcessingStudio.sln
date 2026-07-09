@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResponsiveProcessingStudio.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResponsiveProcessingStudio.Core", "ResponsiveProcessingStudio.Core\ResponsiveProcessingStudio.Core.csproj", "{7ADF8E69-71EA-4E88-8C0B-1EFB6B3BA76C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResponsiveProcessingStudio.Tests", "ResponsiveProcessingStudio.Tests\ResponsiveProcessingStudio.Tests.csproj", "{B246306A-ADDC-4AAF-B1C3-B3B5ED8C8B4C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{7ADF8E69-71EA-4E88-8C0B-1EFB6B3BA76C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7ADF8E69-71EA-4E88-8C0B-1EFB6B3BA76C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7ADF8E69-71EA-4E88-8C0B-1EFB6B3BA76C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B246306A-ADDC-4AAF-B1C3-B3B5ED8C8B4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B246306A-ADDC-4AAF-B1C3-B3B5ED8C8B4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B246306A-ADDC-4AAF-B1C3-B3B5ED8C8B4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B246306A-ADDC-4AAF-B1C3-B3B5ED8C8B4C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
